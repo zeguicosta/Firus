@@ -78,7 +78,7 @@ const Footer = () => {
 
                 </div>
 
-                <div className="border-t border-white/10 pt-8 mt-8 flex flex-col md:flex-row justify-between items-center text-xs">
+                <div className="border-t border-white/10 pt-8 mt-8 flex flex-col md:flex-row justify-between items-center text-xs md:text-sm">
                     <p>&copy; {currentYear} Firus. Todos os direitos reservados.</p>
                     <a href="https://vantdot.netlify.app" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-4 py-2 bg-emerald-600/10 hover:bg-emerald-600/20 rounded-md transition-colors mt-4 md:mt-0">
                         <Code className="h-5 w-5 text-emerald-600" />

@@ -14,7 +14,7 @@ export default {
         customGreen5: '#408718'
       },
       fontFamily: {
-        sans: ['Montserrat', 'sans-serif'],
+        sans: ['Figtree', 'sans-serif'],
       },
       zIndex: {
         '60': '60',
