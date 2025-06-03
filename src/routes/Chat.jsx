@@ -19,7 +19,7 @@ export function Chat() {
   const [messages, setMessages] = useState([
     {
       id: 1,
-      text: "Olá! Eu sou a IA do Firus. Posso fornecer dados sobre queimadas no Brasil para os anos de 2022, 2023 e 2024. Pergunte-me sobre focos por estado, bioma ou o total nacional.",
+      text: "Olá! Eu sou a IA do Firus. Posso fornecer dados sobre queimadas no Brasil para os anos de 2020, 2021, 2022, 2023 e 2024. Pergunte-me sobre focos por estado, bioma ou o total nacional.",
       sender: 'ai',
       timestamp: new Date().toLocaleTimeString()
     }
@@ -33,6 +33,8 @@ export function Chat() {
     2024: { focosByState: {}, focosByBiome: {}, totalBrasil: 0, topState: null },
     2023: { focosByState: {}, focosByBiome: {}, totalBrasil: 0, topState: null },
     2022: { focosByState: {}, focosByBiome: {}, totalBrasil: 0, topState: null },
+    2021: { focosByState: {}, focosByBiome: {}, totalBrasil: 0, topState: null },
+    2020: { focosByState: {}, focosByBiome: {}, totalBrasil: 0, topState: null },
   });
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [dataError, setDataError] = useState(null);
@@ -88,7 +90,7 @@ export function Chat() {
       setIsDataLoading(true);
       setDataError(null);
       try {
-        const years = [2024, 2023, 2022];
+        const years = [2024, 2023, 2022, 2021, 2020];
         const fetchedData = {};
 
         for (const year of years) {
@@ -141,51 +143,74 @@ export function Chat() {
     const lowerInput = inputMessage.toLowerCase();
 
     // Simple year extraction (default to 2024 if not specified or invalid)
-    let yearMatch = lowerInput.match(/\b(2022|2023|2024)\b/);
+    let yearMatch = lowerInput.match(/\b(2020|2021|2022|2023|2024)\b/);
     let queryYear = yearMatch ? parseInt(yearMatch[0]) : 2024;
-    if (!allYearsData[queryYear]) queryYear = 2024; // Fallback if year is weird
+    if (!allYearsData[queryYear] || Object.keys(allYearsData[queryYear].focosByState).length === 0) {
+        // Fallback to the latest year that has data if queryYear is bad or its data is missing
+        const availableYearsWithData = [2024, 2023, 2022, 2021, 2020].filter(y => allYearsData[y] && Object.keys(allYearsData[y].focosByState).length > 0);
+        if (availableYearsWithData.length > 0) {
+            queryYear = availableYearsWithData[0]; // Default to latest available year with data
+        } else {
+            // This case should be rare if at least one year loads, but handle it.
+            aiResponseText = "Desculpe, não tenho dados disponíveis no momento para responder.";
+            // Proceed to send this message and skip further data processing
+            const aiResponse = {
+                id: Date.now() + 1,
+                text: aiResponseText,
+                sender: 'ai',
+                timestamp: new Date().toLocaleTimeString()
+            };
+            setMessages(prev => [...prev, aiResponse]);
+            setIsAiLoading(false);
+            return; // Exit early
+        }
+    }
 
     const dataForYear = allYearsData[queryYear];
 
     try {
-        // 1. Check for national total
-        if (lowerInput.includes('total brasil') || lowerInput.includes('focos no brasil') || lowerInput.includes('quantos focos no brasil')) {
-            const total = dataForYear.totalBrasil;
-            aiResponseText = `Em ${queryYear}, o Brasil registrou um total de ${total.toLocaleString('pt-BR')} focos de queimada.`;
-        }
-        // 2. Check for state data
-        else {
-            let foundState = null;
-            for (const csvName in csvNameToStateId) {
-                if (lowerInput.includes(csvName.toLowerCase())) {
-                    foundState = csvName;
-                    break;
-                }
+        if (!dataForYear || Object.keys(dataForYear.focosByState).length === 0) {
+             aiResponseText = `Desculpe, não tenho dados carregados para o ano ${queryYear}.`;
+        } else {
+            // 1. Check for national total
+            if (lowerInput.includes('total brasil') || lowerInput.includes('focos no brasil') || lowerInput.includes('quantos focos no brasil')) {
+                const total = dataForYear.totalBrasil;
+                aiResponseText = `Em ${queryYear}, o Brasil registrou um total de ${total.toLocaleString('pt-BR')} focos de queimada.`;
             }
-            if (foundState) {
-                const count = dataForYear.focosByState[foundState] || 0;
-                aiResponseText = `Em ${queryYear}, o estado de ${foundState.charAt(0).toUpperCase() + foundState.slice(1).toLowerCase()} teve ${count.toLocaleString('pt-BR')} focos de queimada.`;
-            }
-            // 3. Check for biome data
+            // 2. Check for state data
             else {
-                const biomes = ["Amazônia", "Cerrado", "Mata Atlântica", "Caatinga", "Pampa", "Pantanal"];
-                let foundBiome = null;
-                for (const biome of biomes) {
-                    if (lowerInput.includes(biome.toLowerCase())) {
-                        foundBiome = biome;
+                let foundState = null;
+                for (const csvName in csvNameToStateId) {
+                    if (lowerInput.includes(csvName.toLowerCase())) {
+                        foundState = csvName;
                         break;
                     }
                 }
-                if (foundBiome) {
-                    const count = dataForYear.focosByBiome[foundBiome] || 0;
-                    aiResponseText = `Em ${queryYear}, o bioma ${foundBiome} registrou ${count.toLocaleString('pt-BR')} focos de queimada.`;
+                if (foundState) {
+                    const count = dataForYear.focosByState[foundState] || 0;
+                    aiResponseText = `Em ${queryYear}, o estado de ${foundState.charAt(0).toUpperCase() + foundState.slice(1).toLowerCase()} teve ${count.toLocaleString('pt-BR')} focos de queimada.`;
                 }
-                // 4. Check for top state
-                else if (lowerInput.includes('estado com mais focos') || lowerInput.includes('top estado') || lowerInput.includes('campeão de queimadas')) {
-                    if (dataForYear.topState) {
-                        aiResponseText = `Em ${queryYear}, o estado com mais focos de queimada foi ${dataForYear.topState.name.charAt(0).toUpperCase() + dataForYear.topState.name.slice(1).toLowerCase()} com ${dataForYear.topState.count.toLocaleString('pt-BR')} focos.`;
-                    } else {
-                        aiResponseText = `Não consegui determinar o estado com mais focos para ${queryYear} no momento.`;
+                // 3. Check for biome data
+                else {
+                    const biomes = ["Amazônia", "Cerrado", "Mata Atlântica", "Caatinga", "Pampa", "Pantanal"];
+                    let foundBiome = null;
+                    for (const biome of biomes) {
+                        if (lowerInput.includes(biome.toLowerCase())) {
+                            foundBiome = biome;
+                            break;
+                        }
+                    }
+                    if (foundBiome) {
+                        const count = dataForYear.focosByBiome[foundBiome] || 0;
+                        aiResponseText = `Em ${queryYear}, o bioma ${foundBiome} registrou ${count.toLocaleString('pt-BR')} focos de queimada.`;
+                    }
+                    // 4. Check for top state
+                    else if (lowerInput.includes('estado com mais focos') || lowerInput.includes('top estado') || lowerInput.includes('campeão de queimadas')) {
+                        if (dataForYear.topState) {
+                            aiResponseText = `Em ${queryYear}, o estado com mais focos de queimada foi ${dataForYear.topState.name.charAt(0).toUpperCase() + dataForYear.topState.name.slice(1).toLowerCase()} com ${dataForYear.topState.count.toLocaleString('pt-BR')} focos.`;
+                        } else {
+                            aiResponseText = `Não consegui determinar o estado com mais focos para ${queryYear} no momento.`;
+                        }
                     }
                 }
             }
@@ -294,7 +319,7 @@ export function Chat() {
           </button>
         </form>
         <p className="text-xs text-gray-500 mt-2 text-center">
-          IA em desenvolvimento. Consultas limitadas aos dados de 2022-2024.
+          IA em desenvolvimento. Consultas limitadas aos dados de 2020-2024.
         </p>
       </div>
     </div>

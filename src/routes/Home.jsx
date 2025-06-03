@@ -4,6 +4,8 @@ import BiomeDoughnutChart from '../components/charts/BiomeDoughnutChart'; // Imp
 import StateYearComparisonChart from '../components/charts/StateYearComparisonChart'; // Import the new chart
 import NationalHotspotCountCard from '../components/cards/NationalHotspotCountCard'; // New Card
 import TopStatesBarChart from '../components/charts/TopStatesBarChart'; // New Chart
+import NationalTrendLineChart from '../components/charts/NationalTrendLineChart'; // New import
+import MonthlyHotspotChart from '../components/charts/MonthlyHotspotChart'; // New import
 
 console.log('Type of imported BrazilMapRaw:', typeof BrazilMapRaw);
 console.log('Value of imported BrazilMapRaw:', BrazilMapRaw);
@@ -66,6 +68,23 @@ export function Home() {
   const [focosDataByBiome2022, setFocosDataByBiome2022] = useState(null);
   const [totalFocosBrasil2022, setTotalFocosBrasil2022] = useState(0); // New state
 
+  // New states for monthly data
+  const [focosDataByMonth2024, setFocosDataByMonth2024] = useState(null);
+  const [focosDataByMonth2023, setFocosDataByMonth2023] = useState(null);
+  const [focosDataByMonth2022, setFocosDataByMonth2022] = useState(null);
+
+  // States for 2021 data
+  const [focosDataByState2021, setFocosDataByState2021] = useState(null);
+  const [focosDataByBiome2021, setFocosDataByBiome2021] = useState(null);
+  const [totalFocosBrasil2021, setTotalFocosBrasil2021] = useState(0);
+  const [focosDataByMonth2021, setFocosDataByMonth2021] = useState(null);
+
+  // States for 2020 data
+  const [focosDataByState2020, setFocosDataByState2020] = useState(null);
+  const [focosDataByBiome2020, setFocosDataByBiome2020] = useState(null);
+  const [totalFocosBrasil2020, setTotalFocosBrasil2020] = useState(0);
+  const [focosDataByMonth2020, setFocosDataByMonth2020] = useState(null);
+
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [errorLoadingData, setErrorLoadingData] = useState(null);
   const [selectedYear, setSelectedYear] = useState(2024); 
@@ -76,9 +95,13 @@ export function Home() {
       const header = lines[0].split(',').map(h => h.trim().toLowerCase());
       const dataLines = lines.slice(1);
 
+      const dataPasColumnIndex = header.findIndex(h => h === 'data_pas'); // Find data_pas column
       const estadoColumnIndex = header.findIndex(h => h === 'estado');
       const biomaColumnIndex = header.findIndex(h => h === 'bioma');
 
+      if (dataPasColumnIndex === -1) {
+        console.warn(`Coluna "data_pas" não encontrada no CSV de ${year}. Dados mensais não serão gerados.`);
+      }
       if (estadoColumnIndex === -1) {
         throw new Error(`Coluna "estado" não encontrada no CSV de ${year}. Cabeçalho: ${header.join(', ')}`);
       }
@@ -89,10 +112,27 @@ export function Home() {
       const focosByState = {};
       const focosByBiomeData = {};
       let totalFocosNacional = 0;
+      const focosByMonth = Array(12).fill(0); // Initialize array for 12 months
 
       dataLines.forEach(line => {
         const columns = line.split(',');
         
+        // Increment monthly count if data_pas is available
+        if (dataPasColumnIndex !== -1 && columns.length > dataPasColumnIndex && columns[dataPasColumnIndex]) {
+          try {
+            // Assuming data_pas is in a format that new Date() can parse, e.g., YYYY-MM-DD or YYYY/MM/DD
+            // The CSV seems to use YYYY-MM-DD HH:MM:SS or similar.
+            const dateString = columns[dataPasColumnIndex].split(' ')[0]; // Get only date part if timestamp exists
+            const date = new Date(dateString);
+            if (!isNaN(date.getTime())) { // Check if date is valid
+              const month = date.getMonth(); // 0-11
+              focosByMonth[month] = (focosByMonth[month] || 0) + 1;
+            }
+          } catch (e) {
+            console.warn(`Erro ao processar data_pas "${columns[dataPasColumnIndex]}" na linha: ${line}`, e);
+          }
+        }
+
         if (columns.length > estadoColumnIndex && columns[estadoColumnIndex]) {
           const estadoFromCsv = columns[estadoColumnIndex].trim().toUpperCase();
           focosByState[estadoFromCsv] = (focosByState[estadoFromCsv] || 0) + 1;
@@ -106,17 +146,19 @@ export function Home() {
           }
         }
       });
-      return { focosByState, focosByBiomeData, totalFocosNacional };
+      return { focosByState, focosByBiomeData, totalFocosNacional, focosByMonth };
     };
 
     const fetchData = async () => {
       setIsLoadingData(true);
       setErrorLoadingData(null);
       try {
-        const [response2024, response2023, response2022] = await Promise.all([ // Added 2022
+        const [response2024, response2023, response2022, response2021, response2020] = await Promise.all([
           fetch('/data/focos_br_ref_2024.csv'),
           fetch('/data/focos_br_ref_2023.csv'),
-          fetch('/data/focos_br_ref_2022.csv') // Fetch 2022 data
+          fetch('/data/focos_br_ref_2022.csv'),
+          fetch('/data/focos_br_ref_2021.csv'), // Fetch 2021 data
+          fetch('/data/focos_br_ref_2020.csv')  // Fetch 2020 data
         ]);
 
         if (!response2024.ok) {
@@ -125,28 +167,51 @@ export function Home() {
         if (!response2023.ok) {
           throw new Error(`HTTP error! status: ${response2023.status} para dados de 2023`);
         }
-        if (!response2022.ok) { // Added 2022 check
+        if (!response2022.ok) {
           throw new Error(`HTTP error! status: ${response2022.status} para dados de 2022`);
+        }
+        if (!response2021.ok) {
+          throw new Error(`HTTP error! status: ${response2021.status} para dados de 2021`);
+        }
+        if (!response2020.ok) {
+          throw new Error(`HTTP error! status: ${response2020.status} para dados de 2020`);
         }
 
         const csvText2024 = await response2024.text();
         const csvText2023 = await response2023.text();
-        const csvText2022 = await response2022.text(); // Added 2022 text
+        const csvText2022 = await response2022.text();
+        const csvText2021 = await response2021.text(); // Added 2021 text
+        const csvText2020 = await response2020.text(); // Added 2020 text
 
         const data2024 = parseCsvData(csvText2024, 2024);
         setFocosDataByState2024(data2024.focosByState);
         setFocosDataByBiome2024(data2024.focosByBiomeData);
-        setTotalFocosBrasil2024(data2024.totalFocosNacional); // Set national total
+        setTotalFocosBrasil2024(data2024.totalFocosNacional);
+        setFocosDataByMonth2024(data2024.focosByMonth);
 
         const data2023 = parseCsvData(csvText2023, 2023);
         setFocosDataByState2023(data2023.focosByState);
         setFocosDataByBiome2023(data2023.focosByBiomeData);
-        setTotalFocosBrasil2023(data2023.totalFocosNacional); // Set national total
+        setTotalFocosBrasil2023(data2023.totalFocosNacional);
+        setFocosDataByMonth2023(data2023.focosByMonth);
 
-        const data2022 = parseCsvData(csvText2022, 2022); // Parse 2022 data
+        const data2022 = parseCsvData(csvText2022, 2022);
         setFocosDataByState2022(data2022.focosByState);
         setFocosDataByBiome2022(data2022.focosByBiomeData);
-        setTotalFocosBrasil2022(data2022.totalFocosNacional); // Set national total
+        setTotalFocosBrasil2022(data2022.totalFocosNacional);
+        setFocosDataByMonth2022(data2022.focosByMonth);
+
+        const data2021 = parseCsvData(csvText2021, 2021); // Parse 2021 data
+        setFocosDataByState2021(data2021.focosByState);
+        setFocosDataByBiome2021(data2021.focosByBiomeData);
+        setTotalFocosBrasil2021(data2021.totalFocosNacional);
+        setFocosDataByMonth2021(data2021.focosByMonth);
+
+        const data2020 = parseCsvData(csvText2020, 2020); // Parse 2020 data
+        setFocosDataByState2020(data2020.focosByState);
+        setFocosDataByBiome2020(data2020.focosByBiomeData);
+        setTotalFocosBrasil2020(data2020.totalFocosNacional);
+        setFocosDataByMonth2020(data2020.focosByMonth);
 
       } catch (error) {
         console.error('Failed to load or parse CSV data:', error);
@@ -242,20 +307,67 @@ export function Home() {
   let currentFocosDataByState;
   let currentFocosDataByBiome;
   let currentTotalFocosBrasil;
+  let currentFocosByMonth;
   let topStatesDataForChart = [];
+  let nationalTrendData = { years: [], totals: [] }; // Prepare data for NationalTrendLineChart
+  let availableYears = [2024, 2023, 2022]; // Default, will update if 2020, 2021 data loads
+
+  // Update availableYears if data for older years is present
+  if (totalFocosBrasil2021 !== null) availableYears.push(2021);
+  if (totalFocosBrasil2020 !== null) availableYears.push(2020);
+  availableYears.sort((a,b) => b - a); // Sort descending
 
   if (selectedYear === 2024) {
     currentFocosDataByState = focosDataByState2024;
     currentFocosDataByBiome = focosDataByBiome2024;
     currentTotalFocosBrasil = totalFocosBrasil2024;
+    currentFocosByMonth = focosDataByMonth2024; // Get monthly data for selected year
   } else if (selectedYear === 2023) {
     currentFocosDataByState = focosDataByState2023;
     currentFocosDataByBiome = focosDataByBiome2023;
     currentTotalFocosBrasil = totalFocosBrasil2023;
-  } else { // Assumes 2022 or any other year defaults to 2022 if data exists
+    currentFocosByMonth = focosDataByMonth2023; // Get monthly data for selected year
+  } else if (selectedYear === 2022) {
     currentFocosDataByState = focosDataByState2022;
     currentFocosDataByBiome = focosDataByBiome2022;
     currentTotalFocosBrasil = totalFocosBrasil2022;
+    currentFocosByMonth = focosDataByMonth2022; // Get monthly data for selected year
+  } else if (selectedYear === 2021) {
+    currentFocosDataByState = focosDataByState2021;
+    currentFocosDataByBiome = focosDataByBiome2021;
+    currentTotalFocosBrasil = totalFocosBrasil2021;
+    currentFocosByMonth = focosDataByMonth2021;
+  } else if (selectedYear === 2020) {
+    currentFocosDataByState = focosDataByState2020;
+    currentFocosDataByBiome = focosDataByBiome2020;
+    currentTotalFocosBrasil = totalFocosBrasil2020;
+    currentFocosByMonth = focosDataByMonth2020;
+  } else { 
+    // Fallback to latest year if selectedYear is somehow invalid or not yet loaded
+    currentFocosDataByState = focosDataByState2024;
+    currentFocosDataByBiome = focosDataByBiome2024;
+    currentTotalFocosBrasil = totalFocosBrasil2024;
+    currentFocosByMonth = focosDataByMonth2024;
+    if (!availableYears.includes(selectedYear) && availableYears.length > 0) {
+        setSelectedYear(availableYears[0]); // Reset to the latest available year if current selection is bad
+    }
+  }
+
+  // Prepare data for NationalTrendLineChart if all yearly totals are available
+  const trendYears = [];
+  const trendTotals = [];
+  if (totalFocosBrasil2024 !== null) { trendYears.push('2024'); trendTotals.push(totalFocosBrasil2024); }
+  if (totalFocosBrasil2023 !== null) { trendYears.push('2023'); trendTotals.push(totalFocosBrasil2023); }
+  if (totalFocosBrasil2022 !== null) { trendYears.push('2022'); trendTotals.push(totalFocosBrasil2022); }
+  if (totalFocosBrasil2021 !== null) { trendYears.push('2021'); trendTotals.push(totalFocosBrasil2021); }
+  if (totalFocosBrasil2020 !== null) { trendYears.push('2020'); trendTotals.push(totalFocosBrasil2020); }
+  
+  // Reverse to have chronological order (2020, 2021, ..., 2024) for the line chart
+  if (trendYears.length > 0) {
+      nationalTrendData = {
+          years: trendYears.reverse(),
+          totals: trendTotals.reverse()
+      };
   }
 
   // Prepare data for TopStatesBarChart
@@ -268,7 +380,9 @@ export function Home() {
 
   let displayData = null;
   let selectedStateNameForDisplay = '';
-  let hotspots2022ForSelectedState = 0; // New for comparison chart
+  let hotspots2020ForSelectedState = 0;
+  let hotspots2021ForSelectedState = 0;
+  let hotspots2022ForSelectedState = 0;
   let hotspots2023ForSelectedState = 0;
   let hotspots2024ForSelectedState = 0;
 
@@ -285,7 +399,6 @@ export function Home() {
         hotspots2024ForSelectedState = focosDataByState2024[normalized];
       }
     }
-
     // Get 2023 data
     if (csvStateName && focosDataByState2023 && focosDataByState2023[csvStateName]) {
       hotspots2023ForSelectedState = focosDataByState2023[csvStateName];
@@ -295,7 +408,6 @@ export function Home() {
         hotspots2023ForSelectedState = focosDataByState2023[normalized];
       }
     }
-    
     // Get 2022 data
     if (csvStateName && focosDataByState2022 && focosDataByState2022[csvStateName]) {
       hotspots2022ForSelectedState = focosDataByState2022[csvStateName];
@@ -305,12 +417,32 @@ export function Home() {
         hotspots2022ForSelectedState = focosDataByState2022[normalized];
       }
     }
+    // Get 2021 data
+    if (csvStateName && focosDataByState2021 && focosDataByState2021[csvStateName]) {
+      hotspots2021ForSelectedState = focosDataByState2021[csvStateName];
+    } else {
+      const normalized = csvStateName?.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      if (normalized && focosDataByState2021 && focosDataByState2021[normalized]) {
+        hotspots2021ForSelectedState = focosDataByState2021[normalized];
+      }
+    }
+    // Get 2020 data
+    if (csvStateName && focosDataByState2020 && focosDataByState2020[csvStateName]) {
+      hotspots2020ForSelectedState = focosDataByState2020[csvStateName];
+    } else {
+      const normalized = csvStateName?.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      if (normalized && focosDataByState2020 && focosDataByState2020[normalized]) {
+        hotspots2020ForSelectedState = focosDataByState2020[normalized];
+      }
+    }
     
     // Set displayData for the selected year's card
     let dataForYearCard = 0;
     if (selectedYear === 2024) dataForYearCard = hotspots2024ForSelectedState;
     else if (selectedYear === 2023) dataForYearCard = hotspots2023ForSelectedState;
     else if (selectedYear === 2022) dataForYearCard = hotspots2022ForSelectedState;
+    else if (selectedYear === 2021) dataForYearCard = hotspots2021ForSelectedState;
+    else if (selectedYear === 2020) dataForYearCard = hotspots2020ForSelectedState;
 
     displayData = { focos: dataForYearCard > 0 ? dataForYearCard : 'Dados não disponíveis' };
     if (dataForYearCard === 0 && csvStateName) {
@@ -330,7 +462,7 @@ export function Home() {
             </h1>
             <div className="flex items-center gap-2 sm:gap-4">
               <div className="flex space-x-2">
-                {[2024, 2023, 2022].map((year) => (
+                {availableYears.map((year) => (
                   <button
                     key={year}
                     onClick={() => setSelectedYear(year)}
@@ -365,12 +497,12 @@ export function Home() {
                 onMouseOut={handleStateMouseOut}
               >
                 <BrazilMap className="brazil-map-svg w-full" />
-              </div>
+          </div>
             ) : (
               !isLoadingData && !errorLoadingData && !BrazilMap && <p className="text-center text-red-500">Erro: Mapa não pôde ser carregado.</p>
             )}
-          </div>
-
+            </div>
+            
           {/* Right Column: Selected State Data, Comparison, Biome Chart, Top States Chart */}
           <div className="flex flex-col space-y-6">
             {/* Selected State Info Card */}
@@ -387,22 +519,38 @@ export function Home() {
                     <span className="font-bold text-2xl text-emerald-600 ml-2">
                       {typeof displayData.focos === 'number' ? displayData.focos.toLocaleString('pt-BR') : displayData.focos}
                     </span>
-                  </p>
-                </div>
+              </p>
+            </div>
               ) : (
                 !isLoadingData && <p className="text-slate-500">Clique em um estado no mapa para ver os dados.</p>
               )}
             </div>
-            
+
             {/* State Year Comparison Chart - Renders if a state is selected */}
             {selectedState && !isLoadingData && (
               <div className="bg-white p-4 sm:p-6 rounded-xl shadow-lg">
                 <StateYearComparisonChart 
                   stateName={selectedStateNameForDisplay}
+                  hotspots2020={hotspots2020ForSelectedState}
+                  hotspots2021={hotspots2021ForSelectedState}
                   hotspots2022={hotspots2022ForSelectedState}
                   hotspots2023={hotspots2023ForSelectedState}
                   hotspots2024={hotspots2024ForSelectedState}
                 />
+              </div>
+            )}
+
+            {/* National Trend Line Chart */}
+            {!isLoadingData && nationalTrendData.years.length > 0 && (
+              <div className="bg-white p-4 sm:p-6 rounded-xl shadow-lg">
+                <NationalTrendLineChart trendData={nationalTrendData} isLoading={isLoadingData} />
+              </div>
+            )}
+
+            {/* Monthly Hotspot Chart */}
+            {!isLoadingData && currentFocosByMonth && (
+              <div className="bg-white p-4 sm:p-6 rounded-xl shadow-lg">
+                 <MonthlyHotspotChart monthlyData={currentFocosByMonth} year={selectedYear} isLoading={isLoadingData} />
               </div>
             )}
 
@@ -430,7 +578,7 @@ export function Home() {
               )}
             </div>
 
-          </div>
+            </div>
         </div>
       </div>
     </div>
